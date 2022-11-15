@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using OpenTK;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -6,14 +7,23 @@ namespace BuildingDirectionalDiagram
 {
     public partial class FormVisualizationSource : Form
     {
-        List<Square> squares = new List<Square>();
-        private int counter;
+        List<Square> squaresImage = new List<Square>();
+        List<Square> squaresCalc = new List<Square>();
+
+        public DiagramPoints diagLocal;
+
+        public List<Source> sources = new List<Source>();
+        private static double _d, _KWave;
+        private static int _R;
         Graphics graph;
-        public FormVisualizationSource()
+        GLControl _glC;
+        public FormVisualizationSource(double D, double kWave, int R, ref DiagramPoints dP,ref GLControl glCon)
         {
+            _d = D; _KWave = kWave; _R = R; diagLocal = dP;_glC = glCon;
             InitializeComponent();
             InitVisualization();
             SetSquares();
+
         }
 
         /// <summary>
@@ -23,6 +33,7 @@ namespace BuildingDirectionalDiagram
         {
             pictureBoxSources.Image = new Bitmap(pictureBoxSources.Width, pictureBoxSources.Height);
             graph = Graphics.FromImage(pictureBoxSources.Image);
+            graph.FillRectangle(Brushes.White, 0, 0, pictureBoxSources.Width, pictureBoxSources.Height);
             //Перенос начала координат в центр pictureBox
             graph.TranslateTransform(pictureBoxSources.Width / 2, pictureBoxSources.Height / 2);
             // Изменение направления Oy 
@@ -38,7 +49,8 @@ namespace BuildingDirectionalDiagram
             int heightSource = (pictureBoxSources.Height - (int)thickness * 11) / 10;
 
             Pen pen = new Pen(Color.Red);
-            
+
+
             graph.FillEllipse(Brushes.Red, -5, -5, 10, 10);
             pen = new Pen(Color.Black, thickness);
             //Отрисовка вертикальных линий
@@ -52,58 +64,90 @@ namespace BuildingDirectionalDiagram
                 graph.DrawLine(pen, -widthImage / 2, y, widthImage / 2, y);
             }
 
-            //graph.Dispose();
 
         }
         public void SetSquares()
         {
             float thickness = 2.0f; //Толщина линий
-            int widthImage = pictureBoxSources.Width;
-            int heightImage = pictureBoxSources.Height;
 
             //Ширина одного квадрата
             int widthSource = (pictureBoxSources.Width - (int)thickness * 11) / 10;
             //Высота одного квадрата
             int heightSource = (pictureBoxSources.Height - (int)thickness * 11) / 10;
 
-            for (int x = 2; x < widthImage; x += (widthSource + (int)thickness))
+            for (int x = 2; x < pictureBoxSources.Width; x += (widthSource) + (int)thickness)
             {
-                for (int y = 2; y < heightImage; y += (heightSource + (int)thickness))
+                for (int y = 2; y < pictureBoxSources.Height; y += (heightSource) + (int)thickness)
                 {
-                    squares.Add(new Square(x, y, widthSource, heightSource));
+                    squaresImage.Add(new Square(x, y, widthSource, heightSource));
                 }
-
             }
-            counter = 0;
+
+            for (int x = 0; x < 500; x += (widthSource))
+            {
+                for (int y = 0; y < 500; y += (heightSource))
+                {
+                    squaresCalc.Add(new Square(x, y, widthSource, heightSource));
+                }
+            }
         }
-        public void SetSquareSource(Square sq)
+        public void SetSquareSource(Square sq, int i)
         {
-            //pictureBoxSources.Image = new Bitmap(pictureBoxSources.Width, pictureBoxSources.Height);
             graph = Graphics.FromImage(pictureBoxSources.Image);
 
-            //Pen pen = new Pen(Color.Aqua);
+            double koeff = (5 * _d) / 250d;
+            sq.IsSetted = true;
             graph.FillRectangle(Brushes.Blue, (int)sq.X, (int)sq.Y, sq.Width, sq.Height);
-            //graph.DrawRectangle(pen, (int)sq.X, (int)sq.Y, sq.Width, sq.Height);
-            //graph.Dispose();
+            graph.FillEllipse(Brushes.Red, (int)sq.Center.X - 5, (int)sq.Center.Y - 5, 10, 10);
+
+            sources.Add(new Source((-250 + squaresCalc[i].Center.X) * koeff, (250 - squaresCalc[i].Center.Y) * koeff));
             pictureBoxSources.Refresh();
         }
-        public void SetSources(Point p, Square sq)
+        public void DeleteSquareSource(Square sq,Square calcSq)
         {
-            if (Square.PointInSquare(p, sq))
+            graph = Graphics.FromImage(pictureBoxSources.Image);
+
+            graph.FillRectangle(Brushes.White, (int)sq.X, (int)sq.Y, sq.Width, sq.Height);
+            sq.IsSetted = false;
+
+            double koeff = (5d * _d) / 250d;
+
+            Source deletedSource = new Source(0,0);
+            sources.ForEach(s =>
             {
-                SetSquareSource(sq);
-                counter++;
-            }
+                deletedSource = new Source((-250d + calcSq.Center.X) * koeff, (250d - calcSq.Center.Y) * koeff);
+                if (deletedSource.Equals(s)) 
+                    deletedSource = new Source(s.X,s.Y);
+            });
+            sources.Remove(deletedSource);
+
+            pictureBoxSources.Refresh();
+
         }
+
 
         private void OnClick(object sender, MouseEventArgs e)
         {
-            squares.ForEach(sq => SetSources(new Point(e.X, e.Y), sq));
+            for (int i = 0; i < squaresImage.Count; i++)
+            {
+                if (Square.PointInSquare(new Point(e.X, e.Y), squaresImage[i])
+                    && squaresImage[i].IsSetted == false)
+                {
+                    SetSquareSource(squaresImage[i], i);
+                }
+                else if (Square.PointInSquare(new Point(e.X, e.Y), squaresImage[i])
+                    && squaresImage[i].IsSetted == true)
+                {
+                    DeleteSquareSource(squaresImage[i], squaresCalc[i]);
+                }
+            }
         }
 
         private void buttonBuildDiagram_Click(object sender, System.EventArgs e)
         {
-            counter = 0;
+            diagLocal._sources = sources;
+            this.Enabled = false;
+            MainForm.DrawDiagram(diagLocal, _R, _d, _KWave, ref _glC);
         }
     }
 }
